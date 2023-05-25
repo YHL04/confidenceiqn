@@ -4,23 +4,30 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
+import matplotlib.pyplot as plt
+
 from model import Net, ConfModel
-from dataloader import get_MNIST_dataloaders, get_CIFAR100_dataloaders
+from dataloader import get_MNIST_dataloaders, get_CIFAR10_dataloaders, get_CIFAR100_dataloaders
 
 
 def train(model, train_loader, optimizer, epoch):
+    loss_list = []
+
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.cuda(), target.cuda()
         optimizer.zero_grad()
         output = model(data)
-        loss = F.nll_loss(output, target)
+        loss = F.cross_entropy(output, target)
         loss.backward()
         optimizer.step()
         if batch_idx % 100 == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
+            loss_list.append(loss.item())
+
+    return loss_list
 
 
 def test(model, test_loader):
@@ -155,7 +162,7 @@ def val_conf(model, conf, dataloader):
     print("average uncertainty of right ", avg_uncertainty_right / num_right)
 
 
-def main(epochs=10, conf_epochs=10, dataset="cifar100"):
+def main(epochs=20, conf_epochs=10, dataset="cifar100"):
 
     if dataset == "mnist":
         dim_x, dim_y, channels, classes = 28, 28, 1, 10
@@ -163,7 +170,7 @@ def main(epochs=10, conf_epochs=10, dataset="cifar100"):
 
     if dataset == "cifar10":
         dim_x, dim_y, channels, classes = 32, 32, 3, 10
-        trainloader, testloader = get_MNIST_dataloaders(batch_size=32, test_batch_size=32)
+        trainloader, testloader = get_CIFAR10_dataloaders(batch_size=32, test_batch_size=32)
 
     if dataset == "cifar100":
         dim_x, dim_y, channels, classes = 32, 32, 3, 100
@@ -177,17 +184,20 @@ def main(epochs=10, conf_epochs=10, dataset="cifar100"):
                      dim_y=dim_y,
                      channels=channels).cuda()
 
-    opt_model = optim.Adam(model.parameters(), lr=1e-4)
-    opt_conf = optim.Adam(conf.parameters(), lr=1e-4)
+    opt_model = optim.Adam(model.parameters(), lr=1e-3)
+    opt_conf = optim.Adam(conf.parameters(), lr=1e-3)
 
     for epoch in range(epochs):
-        train(model, trainloader, opt_model, epoch)
+        losses = train(model, trainloader, opt_model, epoch)
         test(model, testloader)
 
     for epoch in range(conf_epochs):
         train_conf(model, conf, trainloader, opt_conf, epoch)
 
     val_conf(model, conf, testloader)
+
+    plt.plot(losses)
+    plt.show()
 
 
 if __name__ == "__main__":
