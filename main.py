@@ -2,9 +2,11 @@
 
 import torch
 import torch.optim as optim
+from torch.optim.lr_scheduler import StepLR
 import torch.nn.functional as F
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from model import Net, ConfModel
 from dataloader import get_MNIST_dataloaders, get_CIFAR10_dataloaders, get_CIFAR100_dataloaders
@@ -18,14 +20,16 @@ def train(model, train_loader, optimizer, epoch):
         data, target = data.cuda(), target.cuda()
         optimizer.zero_grad()
         output = model(data)
-        loss = F.cross_entropy(output, target)
+        loss = F.nll_loss(output, target)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
         if batch_idx % 100 == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
-            loss_list.append(loss.item())
+
+        loss_list.append(loss.item())
 
     return loss_list
 
@@ -78,6 +82,8 @@ def quantile_loss(expected, target, taus):
 
 def train_conf(model, conf, trainloader, optimizer, epoch):
     model.eval()
+    conf.train()
+    losses = []
 
     count = 0
     error_mean = 0
@@ -93,13 +99,13 @@ def train_conf(model, conf, trainloader, optimizer, epoch):
         error = F.nll_loss(pred, target, reduction="none")
 
         # recalculate error
-        count += 1
-
-        error_mean = ((count - 1)/count) * error_mean + \
-                     (error.mean() / count).item()
-
-        error_std = ((count - 1)/count) * error_std + \
-                    (torch.pow(error - error_mean, 2).mean() / count).item()
+        # count += 1
+        #
+        # error_mean = ((count - 1)/count) * error_mean + \
+        #              (error.mean() / count).item()
+        #
+        # error_std = ((count - 1)/count) * error_std + \
+        #             (torch.pow(error - error_mean, 2).mean() / count).item()
 
         # tracking error mean and std, and normalizing error
         # error = error - error_mean
@@ -113,6 +119,7 @@ def train_conf(model, conf, trainloader, optimizer, epoch):
         loss = quantile_loss(pred_error, error, taus)
         # loss = F.mse_loss(pred_error, error)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(conf.parameters(), 1)
         optimizer.step()
 
         if batch_idx % 100 == 0:
@@ -120,6 +127,10 @@ def train_conf(model, conf, trainloader, optimizer, epoch):
             print('Conf Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(trainloader.dataset),
                 100. * batch_idx / len(trainloader), loss.item()))
+
+        losses.append(loss.item())
+
+    return losses
 
 
 def val_conf(model, conf, dataloader):
@@ -148,12 +159,12 @@ def val_conf(model, conf, dataloader):
                     num_wrong += 1
                     avg_uncertainty_wrong += pred_error[i].item()
 
-        print("pred {} real {} estimated error {}"
-              .format(pred[0], target[0], pred_error[0]))
+        # print("pred {} real {} estimated error {}"
+        #       .format(pred[0], target[0], pred_error[0]))
 
     zero_data = torch.zeros(1, 28, 28)
 
-    pred_error, taus = conf(data, n_tau=16)
+    pred_error, taus = conf(data, n_tau=64)
     pred_error = pred_error.mean()
 
     print("zero data estimated error ", pred_error.item())
@@ -162,7 +173,7 @@ def val_conf(model, conf, dataloader):
     print("average uncertainty of right ", avg_uncertainty_right / num_right)
 
 
-def main(epochs=20, conf_epochs=10, dataset="cifar100"):
+def main(epochs=20, conf_epochs=20, dataset="cifar100"):
 
     if dataset == "mnist":
         dim_x, dim_y, channels, classes = 28, 28, 1, 10
@@ -184,19 +195,42 @@ def main(epochs=20, conf_epochs=10, dataset="cifar100"):
                      dim_y=dim_y,
                      channels=channels).cuda()
 
-    opt_model = optim.Adam(model.parameters(), lr=1e-3)
-    opt_conf = optim.Adam(conf.parameters(), lr=1e-3)
+    opt_model = optim.Adadelta(model.parameters(), lr=1.0)
+    opt_conf = optim.Adadelta(conf.parameters(), lr=1.0)
 
+    # opt_model = optim.Adam(model.parameters(), lr=1e-4)
+    # opt_conf = optim.Adam(conf.parameters(), lr=1e-4)
+
+    scheduler_model = StepLR(opt_model, step_size=1, gamma=0.7)
+    scheduler_conf = StepLR(opt_model, step_size=1, gamma=0.7)
+
+    losses = []
     for epoch in range(epochs):
-        losses = train(model, trainloader, opt_model, epoch)
+        loss = train(model, trainloader, opt_model, epoch)
+        losses.extend(loss)
+
         test(model, testloader)
 
-    for epoch in range(conf_epochs):
-        train_conf(model, conf, trainloader, opt_conf, epoch)
+        scheduler_model.step()
 
+    conf.load_state_dict(model.state_dict(), strict=False)
+
+    conf_losses = []
+    for epoch in range(conf_epochs):
+        conf_loss = train_conf(model, conf, trainloader, opt_conf, epoch)
+        conf_losses.extend(conf_loss)
+
+        scheduler_conf.step()
+
+    val_conf(model, conf, trainloader)
     val_conf(model, conf, testloader)
 
-    plt.plot(losses)
+    plt.subplot(2, 1, 1)
+    sns.lineplot(data=losses)
+
+    plt.subplot(2, 1, 2)
+    sns.lineplot(data=conf_losses)
+
     plt.show()
 
 
