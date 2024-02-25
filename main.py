@@ -173,7 +173,7 @@ def val_conf(model, conf, dataloader):
     print("average uncertainty of right ", avg_uncertainty_right / num_right)
 
 
-def main(epochs=20, conf_epochs=20, dataset="cifar100"):
+def main(epochs=2, conf_epochs=2, dataset="mnist"):
 
     if dataset == "mnist":
         dim_x, dim_y, channels, classes = 28, 28, 1, 10
@@ -224,6 +224,9 @@ def main(epochs=20, conf_epochs=20, dataset="cifar100"):
 
     val_conf(model, conf, trainloader)
     val_conf(model, conf, testloader)
+
+    torch.save(model.state_dict(), "saved/model_{}".format(dataset))
+    torch.save(conf.state_dict(), "saved/conf_{}".format(dataset))
 
     plt.subplot(2, 1, 1)
     sns.lineplot(data=losses)
