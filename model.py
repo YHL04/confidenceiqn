@@ -70,6 +70,8 @@ class ConfModelScalar(nn.Module):
 class ConfModel(nn.Module):
     def __init__(self, dim_x=32, dim_y=32, channels=3):
         super(ConfModel, self).__init__()
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         self.d_model = 128
         self.n_cos = 64
 
@@ -83,7 +85,7 @@ class ConfModel(nn.Module):
         self.linear = nn.Linear(self.d_model, self.d_model)
         self.out = nn.Linear(self.d_model, 1)
 
-        self.pis = torch.FloatTensor([np.pi*i for i in range(1, self.n_cos+1)]).view(1, 1, self.n_cos).cuda()
+        self.pis = torch.FloatTensor([np.pi*i for i in range(1, self.n_cos+1)]).view(1, 1, self.n_cos).to(self.device)
 
         self.gelu = nn.GELU()
 
@@ -92,10 +94,10 @@ class ConfModel(nn.Module):
         Calculating the co-sin values depending on the number of tau samples
         """
         assert torch.equal(self.pis,
-                           torch.FloatTensor([np.pi*i for i in range(1, self.n_cos+1)]).view(1, 1, self.n_cos).cuda())
+                           torch.FloatTensor([np.pi*i for i in range(1, self.n_cos+1)]).view(1, 1, self.n_cos).to(self.device))
 
         # (batch_size, n_tau, 1)
-        taus = torch.rand(batch_size, n_tau).unsqueeze(-1).cuda()
+        taus = torch.rand(batch_size, n_tau).unsqueeze(-1).to(self.device)
         cos = torch.cos(taus * self.pis)
 
         assert cos.shape == (batch_size, n_tau, self.n_cos)
