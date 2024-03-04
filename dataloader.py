@@ -16,7 +16,7 @@ def get_MNIST_dataloaders(batch_size, test_batch_size):
 
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        # transforms.Normalize((0.1307,), (0.3081,))
         ])
 
     dataset1 = datasets.MNIST('../data', train=True, download=True,
@@ -42,7 +42,7 @@ def get_CIFAR10_dataloaders(batch_size, test_batch_size):
 
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        # transforms.Normalize((0.1307,), (0.3081,))
         ])
 
     dataset1 = datasets.CIFAR10('../data', train=True, download=True,
@@ -68,7 +68,7 @@ def get_CIFAR100_dataloaders(batch_size, test_batch_size):
 
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        # transforms.Normalize((0.1307,), (0.3081,))
         ])
 
     dataset1 = datasets.CIFAR100('../data', train=True, download=True,

@@ -173,7 +173,7 @@ def val_conf(model, conf, dataloader):
     print("average uncertainty of right ", avg_uncertainty_right / num_right)
 
 
-def main(epochs=2, conf_epochs=2, dataset="mnist"):
+def main(epochs=20, conf_epochs=20, dataset="cifar100"):
 
     if dataset == "mnist":
         dim_x, dim_y, channels, classes = 28, 28, 1, 10
